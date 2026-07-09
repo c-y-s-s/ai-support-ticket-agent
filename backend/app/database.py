@@ -130,7 +130,12 @@ class Database:
             connection.execute(statement)
 
     def _execute_many(self, connection: Any, sql: str, rows: list[tuple]) -> None:
-        connection.executemany(sql.replace("?", self.placeholder), rows)
+        query = sql.replace("?", self.placeholder)
+        if self.is_postgres:
+            with connection.cursor() as cursor:
+                cursor.executemany(query, rows)
+            return
+        connection.executemany(query, rows)
 
     def _execute(self, connection: Any, sql: str, params: tuple = ()):
         return connection.execute(sql.replace("?", self.placeholder), params)

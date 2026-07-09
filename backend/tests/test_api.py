@@ -9,6 +9,7 @@ def setup_module() -> None:
     path = Path("/tmp/ai-support-ticket-agent-test.sqlite3")
     path.unlink(missing_ok=True)
     database.path = str(path)
+    database.database_url = ""
     database.initialize()
 
 
