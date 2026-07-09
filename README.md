@@ -1,5 +1,7 @@
 # AI Support Ticket Agent
 
+繁體中文文件：[README.zh-TW.md](README.zh-TW.md)
+
 AI 客服工單助手，用來展示一個比 chatbot 更接近真實企業情境的 AI application workflow。
 
 客服人員可以在後台查看客戶工單，一鍵執行 AI 分析，取得分類、優先級、情緒、工具查詢結果、建議處理動作與回覆草稿。退款與升級這類高風險動作只會被建立為待審核建議，不會自動執行。
