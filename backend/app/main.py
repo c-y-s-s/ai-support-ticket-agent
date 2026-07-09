@@ -11,7 +11,8 @@ from app.models import EditDraftRequest
 
 settings = get_settings()
 database = Database(settings.database_path, settings.database_url)
-agent = SupportAgent(database)
+openai_model = settings.openai_chat_model or settings.openai_model
+agent = SupportAgent(database, settings.openai_api_key, openai_model)
 evaluation_runner = EvaluationRunner(database, agent)
 
 
@@ -36,7 +37,8 @@ def health() -> dict:
     return {
         "status": "ok",
         "openai_configured": bool(settings.openai_api_key),
-        "mode": "deterministic-demo" if not settings.openai_api_key else "openai-ready",
+        "mode": "responses-api" if settings.openai_api_key else "deterministic-demo",
+        "openai_model": openai_model if settings.openai_api_key else None,
         "database": "postgres" if database.is_postgres else "sqlite",
     }
 

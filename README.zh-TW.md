@@ -9,6 +9,7 @@
 - Nuxt 3 + FastAPI 的 AI SaaS 後台雛型
 - 結構化 AI 輸出：分類、優先級、情緒、升級判斷、風險標記
 - 工具呼叫流程：查顧客、查訂單、查客服政策、建立待審核動作
+- OpenAI Responses API：有 `OPENAI_API_KEY` 時使用 structured output 產生 AI 分析
 - 人工審核流程：AI 產生草稿，人類可以編修、核准或退回
 - 稽核紀錄：記錄 AI 分析、工具呼叫、草稿建立、人工操作
 - 評測報表：用固定測試集驗證分類、工具使用、安全規則與草稿品質
@@ -26,7 +27,7 @@ Supabase Postgres
 OpenAI API
 ```
 
-本地開發預設使用 SQLite 和 deterministic demo agent。沒有 `OPENAI_API_KEY` 也可以展示完整流程；有設定 `DATABASE_URL` 時，後端會改用 Postgres。
+本地開發預設使用 SQLite。沒有 `OPENAI_API_KEY` 時會使用 deterministic demo agent；有 `OPENAI_API_KEY` 時會透過 OpenAI Responses API 產生 structured output。若有設定 `DATABASE_URL`，後端會改用 Postgres。
 
 ## 本地啟動
 
@@ -106,6 +107,7 @@ http://localhost:3000
 ```bash
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.4-mini
+OPENAI_CHAT_MODEL=
 DATABASE_PATH=./support_agent.sqlite3
 DATABASE_URL=
 SUPABASE_URL=
@@ -114,7 +116,7 @@ ALLOWED_ORIGINS=http://localhost:3000
 NUXT_PUBLIC_API_BASE=http://localhost:8000
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` 只能放在後端環境變數，不可以暴露到前端或 Vercel frontend project。
+`OPENAI_CHAT_MODEL` 是相容舊命名的 alias；如果有填，後端會優先使用它，否則使用 `OPENAI_MODEL`。`SUPABASE_SERVICE_ROLE_KEY` 只能放在後端環境變數，不可以暴露到前端或 Vercel frontend project。
 
 ## 面試講法
 

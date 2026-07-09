@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.main import app, database
+from app.main import agent, app, database
 
 
 def setup_module() -> None:
@@ -10,6 +10,8 @@ def setup_module() -> None:
     path.unlink(missing_ok=True)
     database.path = str(path)
     database.database_url = ""
+    agent.client = None
+    agent.openai_api_key = ""
     database.initialize()
 
 

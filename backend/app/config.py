@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "AI Support Ticket Agent"
     openai_api_key: str = ""
     openai_model: str = "gpt-5.4-mini"
+    openai_chat_model: str = ""
     database_url: str = ""
     database_path: str = "./support_agent.sqlite3"
     supabase_url: str = ""
