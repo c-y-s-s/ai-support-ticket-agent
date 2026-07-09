@@ -10,6 +10,7 @@ Build an AI support ticket assistant that helps human agents classify tickets, i
 - Risky actions become pending approvals.
 - Every AI decision, tool call, draft, edit, approval, and rejection is audit logged.
 - The project should be demoable without real customer data or paid API calls.
+- Local development uses SQLite; deployed environments can use Supabase Postgres via `DATABASE_URL`.
 
 ## Core Workflow
 
@@ -19,6 +20,7 @@ Build an AI support ticket assistant that helps human agents classify tickets, i
 4. The AI returns structured triage and a reply draft.
 5. Human agent approves, edits, or rejects the draft.
 6. The system records the complete timeline.
+7. Approval marks the reply as officially approved in the demo, but does not send email or call a CRM.
 
 ## AI Output Contract
 
@@ -51,3 +53,10 @@ The evaluation set checks:
 - Multi-tenant RBAC
 - Background job queue
 - Production observability stack
+
+## Deployment Target
+
+- Frontend: Vercel
+- Backend: Render or Railway
+- Database: Supabase Postgres
+- AI mode: deterministic demo by default, OpenAI-ready when `OPENAI_API_KEY` is configured

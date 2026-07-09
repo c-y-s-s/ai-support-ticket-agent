@@ -3,7 +3,11 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
+
+import psycopg
+from psycopg.rows import dict_row
 
 
 def now_iso() -> str:
@@ -11,14 +15,26 @@ def now_iso() -> str:
 
 
 class Database:
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, database_url: str = "") -> None:
         self.path = path
+        self.database_url = database_url
+
+    @property
+    def is_postgres(self) -> bool:
+        return bool(self.database_url)
+
+    @property
+    def placeholder(self) -> str:
+        return "%s" if self.is_postgres else "?"
 
     @contextmanager
     def connection(self):
-        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.path)
-        connection.row_factory = sqlite3.Row
+        if self.is_postgres:
+            connection = psycopg.connect(self.database_url, row_factory=dict_row)
+        else:
+            Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(self.path)
+            connection.row_factory = sqlite3.Row
         try:
             yield connection
             connection.commit()
@@ -30,78 +46,107 @@ class Database:
 
     def initialize(self) -> None:
         with self.connection() as connection:
-            connection.executescript(
-                """
-                create table if not exists customers (
-                  id text primary key,
-                  name text not null,
-                  tier text not null,
-                  email text not null,
-                  notes text not null
-                );
-                create table if not exists orders (
-                  id text primary key,
-                  customer_id text not null,
-                  status text not null,
-                  total integer not null,
-                  items_json text not null,
-                  delivered_at text,
-                  risk_note text not null
-                );
-                create table if not exists policies (
-                  id text primary key,
-                  topic text not null,
-                  content text not null
-                );
-                create table if not exists tickets (
-                  id text primary key,
-                  customer_id text not null,
-                  order_id text,
-                  subject text not null,
-                  message text not null,
-                  status text not null,
-                  created_at text not null
-                );
-                create table if not exists analyses (
-                  id text primary key,
-                  ticket_id text not null,
-                  payload_json text not null,
-                  created_at text not null
-                );
-                create table if not exists drafts (
-                  id text primary key,
-                  ticket_id text not null,
-                  analysis_id text not null,
-                  content text not null,
-                  status text not null,
-                  created_at text not null
-                );
-                create table if not exists audit_events (
-                  id text primary key,
-                  ticket_id text not null,
-                  event_type text not null,
-                  detail text not null,
-                  created_at text not null
-                );
-                create table if not exists evaluation_runs (
-                  id text primary key,
-                  summary_json text not null,
-                  created_at text not null
-                );
-                """
-            )
+            self._create_schema(connection)
             count = connection.execute("select count(*) as total from tickets").fetchone()["total"]
             if count == 0:
                 self._seed(connection)
 
-    def _seed(self, connection: sqlite3.Connection) -> None:
+    def _create_schema(self, connection: Any) -> None:
+        statements = [
+            """
+            create table if not exists customers (
+              id text primary key,
+              name text not null,
+              tier text not null,
+              email text not null,
+              notes text not null
+            )
+            """,
+            """
+            create table if not exists orders (
+              id text primary key,
+              customer_id text not null,
+              status text not null,
+              total integer not null,
+              items_json text not null,
+              delivered_at text,
+              risk_note text not null
+            )
+            """,
+            """
+            create table if not exists policies (
+              id text primary key,
+              topic text not null,
+              content text not null
+            )
+            """,
+            """
+            create table if not exists tickets (
+              id text primary key,
+              customer_id text not null,
+              order_id text,
+              subject text not null,
+              message text not null,
+              status text not null,
+              created_at text not null
+            )
+            """,
+            """
+            create table if not exists analyses (
+              id text primary key,
+              ticket_id text not null,
+              payload_json text not null,
+              created_at text not null
+            )
+            """,
+            """
+            create table if not exists drafts (
+              id text primary key,
+              ticket_id text not null,
+              analysis_id text not null,
+              content text not null,
+              status text not null,
+              created_at text not null
+            )
+            """,
+            """
+            create table if not exists audit_events (
+              id text primary key,
+              ticket_id text not null,
+              event_type text not null,
+              detail text not null,
+              created_at text not null
+            )
+            """,
+            """
+            create table if not exists evaluation_runs (
+              id text primary key,
+              summary_json text not null,
+              created_at text not null
+            )
+            """,
+        ]
+        for statement in statements:
+            connection.execute(statement)
+
+    def _execute_many(self, connection: Any, sql: str, rows: list[tuple]) -> None:
+        connection.executemany(sql.replace("?", self.placeholder), rows)
+
+    def _execute(self, connection: Any, sql: str, params: tuple = ()):
+        return connection.execute(sql.replace("?", self.placeholder), params)
+
+    @staticmethod
+    def _row_to_dict(row: Any) -> dict:
+        return dict(row) if row else {}
+
+    def _seed(self, connection: Any) -> None:
         customers = [
             ("cus_001", "林佳蓉", "gold", "jia@example.com", "常購買家，偏好快速退款流程"),
             ("cus_002", "王柏翰", "standard", "bohan@example.com", "曾反映配送延遲"),
             ("cus_003", "陳怡君", "vip", "yijun@example.com", "高價值客戶，需謹慎處理"),
             ("cus_004", "張宇翔", "standard", "yuxiang@example.com", "登入問題曾多次發生"),
         ]
-        connection.executemany("insert into customers values (?, ?, ?, ?, ?)", customers)
+        self._execute_many(connection, "insert into customers values (?, ?, ?, ?, ?)", customers)
 
         orders = [
             (
@@ -141,7 +186,7 @@ class Database:
                 "數位商品，不適用配送追蹤",
             ),
         ]
-        connection.executemany("insert into orders values (?, ?, ?, ?, ?, ?, ?)", orders)
+        self._execute_many(connection, "insert into orders values (?, ?, ?, ?, ?, ?, ?)", orders)
 
         policies = [
             (
@@ -165,7 +210,7 @@ class Database:
                 "優惠碼無法使用時需確認活動期限、適用商品與最低消費門檻。",
             ),
         ]
-        connection.executemany("insert into policies values (?, ?, ?)", policies)
+        self._execute_many(connection, "insert into policies values (?, ?, ?)", policies)
 
         tickets = [
             (
@@ -214,7 +259,7 @@ class Database:
                 now_iso(),
             ),
         ]
-        connection.executemany("insert into tickets values (?, ?, ?, ?, ?, ?, ?)", tickets)
+        self._execute_many(connection, "insert into tickets values (?, ?, ?, ?, ?, ?, ?)", tickets)
 
     def list_tickets(self) -> list[dict]:
         with self.connection() as connection:
@@ -223,19 +268,24 @@ class Database:
 
     def get_ticket(self, ticket_id: str) -> dict | None:
         with self.connection() as connection:
-            row = connection.execute("select * from tickets where id = ?", (ticket_id,)).fetchone()
+            row = self._execute(
+                connection, "select * from tickets where id = ?", (ticket_id,)
+            ).fetchone()
         return dict(row) if row else None
 
     def get_customer(self, customer_id: str) -> dict | None:
         with self.connection() as connection:
-            row = connection.execute(
+            row = self._execute(
+                connection,
                 "select * from customers where id = ?", (customer_id,)
             ).fetchone()
         return dict(row) if row else None
 
     def get_order(self, order_id: str) -> dict | None:
         with self.connection() as connection:
-            row = connection.execute("select * from orders where id = ?", (order_id,)).fetchone()
+            row = self._execute(
+                connection, "select * from orders where id = ?", (order_id,)
+            ).fetchone()
         if not row:
             return None
         data = dict(row)
@@ -259,11 +309,13 @@ class Database:
         created_at = now_iso()
         draft_id = f"draft_{uuid4().hex[:10]}"
         with self.connection() as connection:
-            connection.execute(
+            self._execute(
+                connection,
                 "insert into analyses values (?, ?, ?, ?)",
                 (analysis_id, ticket_id, json.dumps(payload, ensure_ascii=False), created_at),
             )
-            connection.execute(
+            self._execute(
+                connection,
                 "insert into drafts values (?, ?, ?, ?, ?, ?)",
                 (
                     draft_id,
@@ -287,7 +339,8 @@ class Database:
 
     def latest_analysis(self, ticket_id: str) -> dict | None:
         with self.connection() as connection:
-            row = connection.execute(
+            row = self._execute(
+                connection,
                 "select * from analyses where ticket_id = ? order by created_at desc limit 1",
                 (ticket_id,),
             ).fetchone()
@@ -301,7 +354,8 @@ class Database:
 
     def list_drafts(self, ticket_id: str) -> list[dict]:
         with self.connection() as connection:
-            rows = connection.execute(
+            rows = self._execute(
+                connection,
                 "select * from drafts where ticket_id = ? order by created_at desc", (ticket_id,)
             ).fetchall()
         return [dict(row) for row in rows]
@@ -311,17 +365,26 @@ class Database:
     ) -> None:
         with self.connection() as connection:
             if content is None:
-                connection.execute("update drafts set status = ? where id = ?", (status, draft_id))
-            else:
-                connection.execute(
-                    "update drafts set status = ?, content = ? where id = ?",
-                    (status, content, draft_id),
+                self._execute(
+                    connection,
+                    "update drafts set status = ? where id = ? and ticket_id = ?",
+                    (status, draft_id, ticket_id),
                 )
-            self._audit(connection, ticket_id, f"draft_{status}", draft_id)
+            else:
+                self._execute(
+                    connection,
+                    "update drafts set status = ?, content = ? where id = ? and ticket_id = ?",
+                    (status, content, draft_id, ticket_id),
+                )
+            detail = draft_id
+            if status == "approved":
+                detail = f"{draft_id}: 正式回覆已核准，demo 模式不會真的寄送訊息。"
+            self._audit(connection, ticket_id, f"draft_{status}", detail)
 
     def audit_log(self, ticket_id: str) -> list[dict]:
         with self.connection() as connection:
-            rows = connection.execute(
+            rows = self._execute(
+                connection,
                 "select * from audit_events where ticket_id = ? order by created_at", (ticket_id,)
             ).fetchall()
         return [dict(row) for row in rows]
@@ -330,7 +393,8 @@ class Database:
         run_id = f"eval_{uuid4().hex[:10]}"
         created_at = now_iso()
         with self.connection() as connection:
-            connection.execute(
+            self._execute(
+                connection,
                 "insert into evaluation_runs values (?, ?, ?)",
                 (run_id, json.dumps(summary, ensure_ascii=False), created_at),
             )
@@ -348,11 +412,11 @@ class Database:
         summary["created_at"] = row["created_at"]
         return summary
 
-    @staticmethod
     def _audit(
-        connection: sqlite3.Connection, ticket_id: str, event_type: str, detail: str
+        self, connection: Any, ticket_id: str, event_type: str, detail: str
     ) -> None:
-        connection.execute(
+        self._execute(
+            connection,
             "insert into audit_events values (?, ?, ?, ?, ?)",
             (f"evt_{uuid4().hex[:10]}", ticket_id, event_type, detail, now_iso()),
         )

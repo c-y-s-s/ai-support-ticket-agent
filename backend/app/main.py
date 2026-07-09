@@ -10,7 +10,7 @@ from app.evaluation import EvaluationRunner
 from app.models import EditDraftRequest
 
 settings = get_settings()
-database = Database(settings.database_path)
+database = Database(settings.database_path, settings.database_url)
 agent = SupportAgent(database)
 evaluation_runner = EvaluationRunner(database, agent)
 
@@ -37,6 +37,7 @@ def health() -> dict:
         "status": "ok",
         "openai_configured": bool(settings.openai_api_key),
         "mode": "deterministic-demo" if not settings.openai_api_key else "openai-ready",
+        "database": "postgres" if database.is_postgres else "sqlite",
     }
 
 

@@ -60,6 +60,8 @@ const toolLabel: Record<string, string> = {
 }
 
 const auditLabel: Record<string, string> = {
+  analysis_created: 'AI 分析完成',
+  tool_call: '工具呼叫紀錄',
   ai_analysis_created: 'AI 分析完成',
   tool_call_recorded: '工具呼叫紀錄',
   draft_created: '回覆草稿建立',
